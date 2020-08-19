@@ -28,10 +28,13 @@ import org.elasticsearch.search.SearchHit;
 import org.elasticsearch.search.SearchHits;
 import org.elasticsearch.search.builder.SearchSourceBuilder;
 import org.elasticsearch.search.fetch.subphase.FetchSourceContext;
+import org.junit.AfterClass;
+import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.SpringApplication;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.junit4.SpringRunner;
 
@@ -55,12 +58,17 @@ public class EsAppTest {
 		INDEX_TEST = "index_test";
 		TYPE_TEST = "_doc";
 		testsList = new ArrayList<>();
-		for (int i = 0; i < 100; i++) {
+		for (int i = 0; i < 500; i++) {
 			tests = new Tests();
 			tests.setId(Long.valueOf(i));
 			tests.setName("this is the test " + i);
 			testsList.add(tests);
 		}
+	}
+
+	@AfterClass
+	public static void after(){
+		System.out.println("this is the after class method");
 	}
 	
 	@Test
@@ -112,6 +120,8 @@ public class EsAppTest {
 	public void test_bulk() throws IOException {
 		// 批量增加
 		BulkRequest bulkAddRequest = new BulkRequest();
+		long start = System.currentTimeMillis();
+
 		for (int i = 0; i < testsList.size(); i++) {
 			tests = testsList.get(i);
 			IndexRequest indexRequest = new IndexRequest(INDEX_TEST, TYPE_TEST, tests.getId().toString());
@@ -119,8 +129,45 @@ public class EsAppTest {
 			bulkAddRequest.add(indexRequest);
 		}
 		BulkResponse bulkAddResponse = client.bulk(bulkAddRequest, RequestOptions.DEFAULT);
+		long end = System.currentTimeMillis();
+		long count = end - start;
 		System.out.println("bulkAdd: " + JSON.toJSONString(bulkAddResponse));
+		System.out.println("批量插入运行time: " + count);
 		search(INDEX_TEST, TYPE_TEST, "this");
+	}
+
+	//逐条插入相对于批量插入的时间优劣
+	@Test
+	public void test_per_insert(){
+		long start = System.currentTimeMillis();
+
+		for (int i = 0; i < testsList.size(); i++) {
+			tests = testsList.get(i);
+			IndexRequest indexRequest = new IndexRequest(INDEX_TEST, TYPE_TEST, tests.getId().toString());
+			indexRequest.source(JSON.toJSONString(tests), XContentType.JSON);
+			try{
+				client.index(indexRequest);
+			}catch (Exception e){
+				e.printStackTrace();
+			}
+		}
+		long end = System.currentTimeMillis();
+		long count = end - start;
+		System.out.println("单独插入运行time: " + count);
+	}
+
+	@Test
+	public void test_delete_bulk() throws IOException {
+		BulkRequest bulkAddRequest = new BulkRequest();
+		DeleteResponse deleteResponse = null;
+		for (int i = 0; i < testsList.size() ; i++) {
+			tests = testsList.get(i);
+			DeleteRequest deleteRequest = new DeleteRequest(INDEX_TEST,TYPE_TEST,tests.getId().toString());
+			deleteResponse = client.delete(deleteRequest);
+			System.out.println(deleteResponse);
+		}
+		Assert.assertNotNull(testsList);
+
 	}
 	
 	/**
